@@ -1,0 +1,92 @@
+{
+  "name": "Screenshot Bug Reporter - Ollama to Jira",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "screenshot-bug-reporter", "responseMode": "responseNode", "options": {}},
+      "id": "webhook",
+      "name": "Screenshot Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-900, 0]
+    },
+    {
+      "parameters": {"jsCode": "const item = $input.first();\nconst binary = item.binary?.screenshot;\nif (!binary) throw new Error('Missing binary field: screenshot');\nconst allowed = ['image/png', 'image/jpeg', 'image/webp'];\nif (!allowed.includes(binary.mimeType)) throw new Error('Only PNG, JPEG, and WebP screenshots are supported');\nif (!binary.data) throw new Error('Screenshot binary has no data');\nreturn [{ json: { context: item.json?.context || '', mimeType: binary.mimeType, fileName: binary.fileName || 'screenshot' }, binary: item.binary }];"},
+      "id": "validate",
+      "name": "Validate Screenshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-680, 0]
+    },
+    {
+      "parameters": {"method": "POST", "url": "={{ ($env.OLLAMA_BASE_URL || $env.Ollama_URL || 'http://localhost:11434').replace(/\\/$/, '') }}/api/generate", "sendBody": true, "specifyBody": "json", "jsonBody": "={{ { model: 'gemma3:latest', stream: false, format: 'json', prompt: 'Analyze this UI screenshot as a QA engineer. Return only valid JSON with title, summary, steps_to_reproduce, expected_result, actual_result, environment, severity, priority, labels, confidence, assumptions. Infer only what the screenshot supports. Reporter context: ' + ($json.context || 'None provided'), images: [$('Validate Screenshot').first().binary.screenshot.data] } }}", "options": {"timeout": 120000}},
+      "id": "ollama",
+      "name": "Analyze with Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-440, 0]
+    },
+    {
+      "parameters": {"jsCode": "const input = $input.first().json;\nconst source = typeof input.response === 'string' ? input.response : input.response?.response;\nif (!source) throw new Error('Ollama returned no response field');\nlet report;\ntry { report = JSON.parse(source); } catch (error) { throw new Error('Ollama response is not valid JSON: ' + error.message); }\nconst required = ['title','summary','steps_to_reproduce','expected_result','actual_result','environment','severity','priority','labels','confidence','assumptions'];\nconst missing = required.filter((field) => !(field in report));\nif (missing.length) throw new Error('Ollama report is missing: ' + missing.join(', '));\nif (!Array.isArray(report.steps_to_reproduce) || !Array.isArray(report.labels) || !Array.isArray(report.assumptions)) throw new Error('Ollama report arrays are invalid');\nif (typeof report.confidence !== 'number' || report.confidence < 0 || report.confidence > 1) throw new Error('Ollama confidence must be a number between 0 and 1');\nconst sourceItem = $('Validate Screenshot').first();\nreturn [{ json: { report, mimeType: sourceItem.json.mimeType, fileName: sourceItem.json.fileName }, binary: sourceItem.binary }];"},
+      "id": "parse",
+      "name": "Validate Bug Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-180, 0]
+    },
+    {
+      "parameters": {"jsCode": "const item = $input.first();\nconst configuredIssueUrl = $env.JIRA_ISSUE_URL || $env.JIRA_URL || 'https://rahul-mansing-jamadar.atlassian.net/rest/api/3/issue';\nconst issueUrl = configuredIssueUrl.replace(/\\/$/, '');\nconst baseUrl = issueUrl.replace(/\\/rest\\/api\\/3\\/issue$/, '');\nconst projectKey = $env.JIRA_PROJECT_KEY || 'VWO';\nconst issueType = $env.JIRA_ISSUE_TYPE || 'Bug';\nconst missing = [];\nif (!baseUrl || baseUrl === issueUrl) missing.push('JIRA_ISSUE_URL or JIRA_URL must end with /rest/api/3/issue');\nif (!item.json.report) throw new Error('Bug report is missing before Jira creation');\nreturn [{ json: { ...item.json, jiraIssueUrl: issueUrl, jiraBaseUrl: baseUrl, jiraProjectKey: projectKey, jiraIssueType: issueType }, binary: item.binary }];"},
+      "id": "config",
+      "name": "Validate Jira Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {"method": "POST", "url": "={{ $json.jiraIssueUrl }}", "authentication": "predefinedCredentialType", "nodeCredentialType": "jiraSoftwareCloudApi", "sendBody": true, "specifyBody": "json", "jsonBody": "={{ { fields: { project: { key: $json.jiraProjectKey }, summary: $json.report.title, description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: $json.report.summary }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Steps to reproduce: ' + $json.report.steps_to_reproduce.map((step, index) => (index + 1) + '. ' + step).join(' ') }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Expected: ' + $json.report.expected_result + ' Actual: ' + $json.report.actual_result + ' Environment: ' + $json.report.environment }] }] }, issuetype: { name: $json.jiraIssueType }, labels: $json.report.labels } } }}", "options": {"timeout": 30000}},
+      "id": "jira-create",
+      "name": "Create Jira Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {"jsCode": "const issue = $input.first().json;\nconst source = $('Validate Bug Report').first();\nif (!issue.key) throw new Error('Jira did not return an issue key');\nif (!source.binary?.screenshot) throw new Error('Screenshot binary was lost before Jira attachment');\nreturn [{ json: { issueKey: issue.key, report: source.json.report, mimeType: source.json.mimeType, fileName: source.json.fileName }, binary: source.binary }];"},
+      "id": "jira-bridge",
+      "name": "Prepare Jira Attachment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {"method": "POST", "url": "={{ $('Validate Jira Configuration').first().json.jiraBaseUrl }}/rest/api/3/issue/{{ $json.issueKey }}/attachments", "authentication": "predefinedCredentialType", "nodeCredentialType": "jiraSoftwareCloudApi", "sendBody": false, "sendBinaryData": true, "inputDataFieldName": "screenshot", "headerParametersUi": {"parameter": [{"name": "X-Atlassian-Token", "value": "no-check"}]}, "options": {"timeout": 30000}},
+      "id": "jira-attach",
+      "name": "Attach Screenshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 0]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ { ok: true, issueKey: $('Prepare Jira Attachment').first().json.issueKey, issueUrl: ($('Validate Jira Configuration').first().json.jiraBaseUrl + '/browse/' + $('Prepare Jira Attachment').first().json.issueKey), attachment: true } }}", "options": {}},
+      "id": "success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [940, 0]
+    }
+  ],
+  "connections": {
+    "Screenshot Upload": {"main": [[{"node": "Validate Screenshot", "type": "main", "index": 0}]]},
+    "Validate Screenshot": {"main": [[{"node": "Analyze with Ollama", "type": "main", "index": 0}]]},
+    "Analyze with Ollama": {"main": [[{"node": "Validate Bug Report", "type": "main", "index": 0}]]},
+    "Validate Bug Report": {"main": [[{"node": "Validate Jira Configuration", "type": "main", "index": 0}]]},
+    "Validate Jira Configuration": {"main": [[{"node": "Create Jira Issue", "type": "main", "index": 0}]]},
+    "Create Jira Issue": {"main": [[{"node": "Prepare Jira Attachment", "type": "main", "index": 0}]]},
+    "Prepare Jira Attachment": {"main": [[{"node": "Attach Screenshot", "type": "main", "index": 0}]]},
+    "Attach Screenshot": {"main": [[{"node": "Return Success", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "versionId": "screenshot-bug-reporter-v1",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

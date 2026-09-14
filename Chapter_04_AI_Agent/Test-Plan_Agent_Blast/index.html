@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Plan Agent - BLAST</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #171e2e;
+    --panel-2: #1d2638;
+    --border: #2a3550;
+    --text: #e6eaf2;
+    --muted: #8b96ad;
+    --accent: #4f8cff;
+    --accent-2: #7c5cff;
+    --ok: #34d399;
+    --err: #f87171;
+    --warn: #fbbf24;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #1b2440 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 20px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 10px; flex: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center; font-weight: 700; font-size: 20px;
+    color: #fff; box-shadow: 0 6px 18px rgba(79,140,255,.35);
+  }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 26px; }
+  .grid { display: grid; grid-template-columns: 380px 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+  }
+  .card h2 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 16px; }
+
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 6px; }
+  input[type=text], textarea, select {
+    width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    font-size: 14px; font-family: inherit; outline: none; transition: border-color .15s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 150px; line-height: 1.5; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  .btn {
+    width: 100%; margin-top: 18px; padding: 12px; border: none; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: filter .15s, transform .05s;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .6; cursor: not-allowed; }
+
+  .status { display: none; margin-top: 14px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+  .status.show { display: block; }
+  .status.err { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.35); color: var(--err); }
+  .status.ok { background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.35); color: var(--ok); }
+  .status.warn { background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.35); color: var(--warn); }
+
+  .output-card { min-height: 480px; }
+  .markdown { line-height: 1.65; font-size: 14px; }
+  .markdown h1 { font-size: 20px; margin: 4px 0 14px; }
+  .markdown h2 { font-size: 16px; margin: 22px 0 8px; color: var(--accent); }
+  .markdown h3 { font-size: 14px; margin: 18px 0 6px; }
+  .markdown p { margin: 6px 0; color: var(--text); }
+  .markdown ul { margin: 6px 0 6px 20px; }
+  .markdown li { margin: 3px 0; }
+  .markdown table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+  .markdown th, .markdown td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  .markdown th { background: var(--panel-2); font-weight: 600; }
+  .markdown strong { color: #fff; }
+  .placeholder {
+    color: var(--muted); text-align: center; padding: 90px 20px; font-size: 14px;
+  }
+  .placeholder .big { font-size: 34px; margin-bottom: 12px; }
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px;
+    font-weight: 600; margin-left: 8px; vertical-align: middle;
+  }
+  .pill.Positive { background: rgba(52,211,153,.15); color: var(--ok); }
+  .pill.Negative { background: rgba(248,113,113,.15); color: var(--err); }
+  .pill.Boundary { background: rgba(251,191,36,.15); color: var(--warn); }
+  .pill.API, .pill.UI { background: rgba(79,140,255,.15); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">TP</div>
+    <div>
+      <h1>Test Plan Agent</h1>
+    </div>
+  </header>
+  <p class="sub">B.L.A.S.T. framework · Deterministic QA test plan generator</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Feature Requirement</h2>
+      <label for="feature_name">Feature Name</label>
+      <input type="text" id="feature_name" placeholder="e.g. User Login" value="User Login">
+
+      <label for="requirement_text">Requirement Text</label>
+      <textarea id="requirement_text" placeholder="Describe the feature behavior precisely...">Users must be able to log in with their email and password. The system must lock the account after 5 failed attempts.</textarea>
+      <div class="hint">This is the source of truth. Missing details become assumptions/risks.</div>
+
+      <label for="source">Source</label>
+      <select id="source">
+        <option value="story" selected>User Story</option>
+        <option value="jira">Jira Ticket</option>
+        <option value="manual_requirement">Manual Requirement</option>
+      </select>
+
+      <label for="acceptance_criteria">Acceptance Criteria (one per line)</label>
+      <textarea id="acceptance_criteria" style="min-height:70px" placeholder="Successful login redirects to the dashboard">Successful login redirects to the dashboard</textarea>
+
+      <label for="constraints">Constraints (one per line)</label>
+      <textarea id="constraints" style="min-height:50px" placeholder="Max 5 login attempts">Max 5 login attempts</textarea>
+
+      <label for="env">Environment</label>
+      <select id="env">
+        <option value="local" selected>Local</option>
+        <option value="staging">Staging</option>
+        <option value="prod">Production</option>
+      </select>
+
+      <button class="btn" id="generateBtn">Generate Test Plan</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card output-card">
+      <h2>Generated Test Plan</h2>
+      <div class="markdown" id="output">
+        <div class="placeholder">
+          <div class="big">🚀</div>
+          Enter a feature requirement and click <strong>Generate Test Plan</strong>.<br>
+          The deterministic tools will produce a structured QA plan.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const featureName = document.getElementById('feature_name');
+const requirementText = document.getElementById('requirement_text');
+const source = document.getElementById('source');
+const acceptanceCriteria = document.getElementById('acceptance_criteria');
+const constraints = document.getElementById('constraints');
+const env = document.getElementById('env');
+const generateBtn = document.getElementById('generateBtn');
+const statusBox = document.getElementById('status');
+const output = document.getElementById('output');
+
+function splitLines(value) {
+  return value.split('\n').map(s => s.trim()).filter(Boolean);
+}
+
+function showStatus(type, message) {
+  statusBox.className = 'status show ' + type;
+  statusBox.textContent = message;
+}
+
+// Tiny markdown renderer for the known output shape.
+function renderMarkdown(md) {
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const lines = md.split('\n');
+  let html = '';
+  let inTable = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.startsWith('|')) {
+      if (!inTable) { html += '<table>'; inTable = true; }
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+      const isHeader = cells.every(c => /^[-:]+$/.test(c));
+      if (isHeader) continue;
+      html += '<tr>' + cells.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>';
+      continue;
+    }
+    if (inTable) { html += '</table>'; inTable = false; }
+
+    if (line.startsWith('# ')) { html += `<h1>${esc(line.slice(2))}</h1>`; }
+    else if (line.startsWith('## ')) { html += `<h2>${esc(line.slice(3))}</h2>`; }
+    else if (line.startsWith('### ')) { html += `<h3>${esc(line.slice(4))}</h3>`; }
+    else if (line.trim() === '') { html += '<p></p>'; }
+    else if (/^\s*[-*] /.test(line)) { html += `<ul><li>${esc(line.trim().slice(2))}</li></ul>`; }
+    else if (/^\s*\d+\. /.test(line)) { html += `<p class="step">${esc(line.trim())}</p>`; }
+    else if (/^\*\*.+\*\*$/.test(line.trim())) {
+      html += `<p><strong>${esc(line.trim().replace(/^\*\*|\*\*$/g, ''))}</strong></p>`;
+    }
+    else {
+      // Bold inline + pill badges for Priority/Type line
+      let s = esc(line);
+      s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/^\|\s*(\w+)\s*\|(.*)$/g, (m, p, rest) => `<td>${p}</td>${rest}`);
+      s = s.replace(/(Positive|Negative|Boundary|API|UI)/g, '<span class="pill $1">$1</span>');
+      html += `<p>${s}</p>`;
+    }
+  }
+  return html;
+}
+
+generateBtn.addEventListener('click', async () => {
+  const payload = {
+    feature_name: featureName.value.trim(),
+    requirement_text: requirementText.value.trim(),
+    source: source.value,
+    acceptance_criteria: splitLines(acceptanceCriteria.value),
+    constraints: splitLines(constraints.value),
+    env: env.value,
+  };
+
+  generateBtn.disabled = true;
+  generateBtn.textContent = 'Generating...';
+  showStatus('warn', 'Validating requirement and generating test plan...');
+
+  try {
+    const res = await fetch('/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      showStatus('err', 'Requirement failed validation: ' + (data.errors || []).join(' '));
+      return;
+    }
+    output.innerHTML = renderMarkdown(data.markdown);
+    showStatus('ok', `Test plan generated (${data.meta.test_case_count} test cases).`);
+  } catch (e) {
+    showStatus('err', 'Server error: ' + e.message);
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'Generate Test Plan';
+  }
+});
+</script>
+</body>
+</html>
