@@ -4,6 +4,19 @@ node_modules/
 # Playwright
 playwright-report/
 test-results/
+allure-report/
+allure-results/
+Basics_Playwright/
+Session_Storage/
+
+# Local env and auth files
+.env
+.env.*
+auth.json
+
+# Playwright MCP / local tooling state
+.playwright-mcp/
+.commandcode/
 
 # VS Code
 .vscode/

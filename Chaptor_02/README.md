@@ -1,25 +1,35 @@
-# Chaptor_02 Playwright Framework
+# Chapter 02 Playwright Framework
 
-This folder contains an industry-style Playwright test framework using Page Object Model (POM) and test planning for the login page at https://practicetestautomation.com/practice-test-login/.
+A clean Playwright test framework for the login page at https://practicetestautomation.com/practice-test-login/.
 
-## Structure
+## Project structure
 - `tests/` — test definitions
-- `pages/` — page object classes
-- `playwright.config.js` — Playwright configuration
-- `TestPlan.md` — test plan and requirement mapping
+- `pages/` — page objects
+- `data/` — reusable test data and locators
+- `playwright.config.js` — framework configuration
+- `playwright-report/` — generated reports
+
+## Improvements
+- Page Object Model implemented for login page behavior
+- Reusable test data in a separate module
+- Explicit success and error assertions
+- Browser matrix with Chromium and Firefox
+- CI-friendly retry and worker configuration
+- HTML report generation on test runs
+
+## Run locally
+```bash
+cd Chaptor_02
+npm install
+npx playwright install
+npm test
+```
+
+## View report
+```bash
+npm run test:report
+```
 
 ## Notes
-- Converted from TypeScript to JavaScript.
-- Uses default XPath selectors only.
-- Test credentials: Username `student`, Password `Password123`.
-
-## How to Run
-1. Open a terminal in `Chaptor_02`.
-2. Install dependencies: `npm install`
-3. Install Playwright browsers: `npx playwright install`
-4. Run the tests: `npm test`
-5. View the HTML report: `npm run test:report`
-
-## Additional Information
-- The tests use Playwright wait mechanisms instead of hard sleeps.
-- The framework is designed for local execution; network access is required to download browsers.
+- Use `BASE_URL` to target environments other than production.
+- The framework uses Playwright's built-in locators, waits, and trace support.

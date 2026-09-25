@@ -1,6 +1,33 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 import { LoginPage } from '../pages/loginPage.js';
 import { loginData } from '../data/loginData.js';
+
+const negativeCases = [
+  {
+    title: 'invalid username',
+    username: loginData.invalidUsername,
+    password: loginData.validPassword,
+    expectedError: loginData.errorMessages.invalidUsername,
+  },
+  {
+    title: 'invalid password',
+    username: loginData.validUsername,
+    password: loginData.invalidPassword,
+    expectedError: loginData.errorMessages.invalidPassword,
+  },
+  {
+    title: 'empty username',
+    username: '',
+    password: loginData.validPassword,
+    expectedError: loginData.errorMessages.invalidUsername,
+  },
+  {
+    title: 'empty password',
+    username: loginData.validUsername,
+    password: '',
+    expectedError: loginData.errorMessages.invalidPassword,
+  },
+];
 
 test.describe('Practice Test Automation Login', () => {
   test.beforeEach(async ({ page }) => {
@@ -11,32 +38,14 @@ test.describe('Practice Test Automation Login', () => {
   test('Positive login should navigate to success page', async ({ page }) => {
     const loginPage = new LoginPage(page);
     await loginPage.login(loginData.validUsername, loginData.validPassword);
-    await expect(page).toHaveURL(new RegExp(loginData.loggedInUrlPart));
-    await expect(page.locator(loginData.successMessageLocator)).toBeVisible();
-    await expect(page.locator(loginData.logoutButtonSelector)).toBeVisible();
+    await loginPage.expectSuccessfulLogin();
   });
 
-  test('Negative login with invalid username should show username error', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    await loginPage.login(loginData.invalidUsername, loginData.validPassword);
-    await loginPage.expectErrorMessage(loginData.errorMessages.invalidUsername);
-  });
-
-  test('Negative login with invalid password should show password error', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    await loginPage.login(loginData.validUsername, loginData.invalidPassword);
-    await loginPage.expectErrorMessage(loginData.errorMessages.invalidPassword);
-  });
-
-  test('Negative login with empty username should show username error', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    await loginPage.login('', loginData.validPassword);
-    await loginPage.expectErrorMessage(loginData.errorMessages.invalidUsername);
-  });
-
-  test('Negative login with empty password should show password error', async ({ page }) => {
-    const loginPage = new LoginPage(page);
-    await loginPage.login(loginData.validUsername, '');
-    await loginPage.expectErrorMessage(loginData.errorMessages.invalidPassword);
-  });
+  for (const caseData of negativeCases) {
+    test(`Negative login with ${caseData.title} should show error`, async ({ page }) => {
+      const loginPage = new LoginPage(page);
+      await loginPage.login(caseData.username, caseData.password);
+      await loginPage.expectErrorMessage(caseData.expectedError);
+    });
+  }
 });

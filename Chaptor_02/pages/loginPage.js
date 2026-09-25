@@ -4,10 +4,12 @@ import { loginData } from '../data/loginData.js';
 export class LoginPage {
   constructor(page) {
     this.page = page;
-    this.usernameInput = page.locator("xpath=//input[@name='username']");
-    this.passwordInput = page.locator("xpath=//input[@name='password']");
-    this.submitButton = page.locator("xpath=//button[text()='Submit']");
-    this.errorMessage = page.locator("xpath=//div[@id='error']");
+    this.usernameInput = page.locator('[name="username"]');
+    this.passwordInput = page.locator('[name="password"]');
+    this.submitButton = page.locator('button:has-text("Submit")');
+    this.errorMessage = page.locator('#error');
+    this.successMessage = page.locator(loginData.successMessageLocator);
+    this.logoutButton = page.locator(loginData.logoutButtonSelector);
   }
 
   async goto() {
@@ -20,6 +22,12 @@ export class LoginPage {
     await this.usernameInput.fill(username);
     await this.passwordInput.fill(password);
     await this.submitButton.click();
+  }
+
+  async expectSuccessfulLogin() {
+    await expect(this.page).toHaveURL(new RegExp(loginData.loggedInUrlPart));
+    await expect(this.successMessage).toBeVisible();
+    await expect(this.logoutButton).toBeVisible();
   }
 
   async expectErrorMessage(expectedText) {

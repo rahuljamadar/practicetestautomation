@@ -4,12 +4,12 @@ const config = {
   expect: {
     timeout: 5000,
   },
-  fullyParallel: false,
-  workers: 1,
-  retries: 0,
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report' }]],
+  fullyParallel: true,
+  workers: process.env.CI ? 1 : undefined,
+  retries: process.env.CI ? 2 : 1,
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
-    channel: 'chrome',
+    baseURL: process.env.BASE_URL || 'https://practicetestautomation.com',
     actionTimeout: 10000,
     navigationTimeout: 20000,
     headless: true,
@@ -17,7 +17,23 @@ const config = {
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    trace: 'on-first-retry',
   },
+  projects: [
+    {
+      name: 'chromium',
+      use: { browserName: 'chromium', channel: 'chrome' },
+    },
+    {
+      name: 'firefox',
+      use: {
+        browserName: 'firefox',
+        launchOptions: {
+          executablePath: process.env.FIREFOX_EXECUTABLE_PATH || 'C:\\Program Files\\Mozilla Firefox\\firefox.exe',
+        },
+      },
+    },
+  ],
 };
 
 export default config;
