@@ -1,0 +1,19 @@
+# Node
+node_modules/
+
+# Playwright
+playwright-report/
+test-results/
+trace.zip
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/

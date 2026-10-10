@@ -1,0 +1,693 @@
+{
+  "name": "QA Orchestrator - Enterprise Requirement to QA Package",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Paste a CRS, BRD, Jira ID, User Story, or requirement text.",
+        "options": {}
+      },
+      "id": "chat_trigger_requirement_input",
+      "name": "Chat Trigger - Requirement Input",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "qa-orchestrator-chat-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.chatInput ?? $json.requirement ?? $json.text ?? '';\n\nreturn [{\n  json: {\n    requirement: String(input).trim(),\n    requestId: `QA-${Date.now()}` ,\n    receivedAt: new Date().toISOString(),\n    requestedStages: ['Requirement Analysis', 'Test Plan', 'Manual Test Cases', 'Automation']\n  }\n}];"
+      },
+      "id": "normalize_requirement",
+      "name": "Normalize Requirement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.requirement }}",
+        "options": {
+          "systemMessage": "You are the QA Orchestrator for an enterprise software team.\\n\\nYour job is to transform a CRS, BRD, user story, Jira ticket, acceptance criteria, or defect description into a complete QA package.\\n\\nStrict anti-hallucination rules:\\n- Never invent business behavior, fields, APIs, permissions, database tables, selectors, or acceptance criteria not supported by the requirement.\\n- Separate confirmed facts from assumptions and unknowns.\\n- If unclear or incomplete, ask clarifying questions instead of guessing.\\n- If missing info exists, mark it as TBD.\\n- Keep traceability to the original requirement.\\n- Do not claim execution proof without provided evidence.\\n\\nUse the RICEPOT framework: Role, Instruction, Context, Example, Parameters, Output, Tone.\\n\\nReturn valid JSON only.\\n\\nOUTPUT:\\n{\\n  \\\"request_id\\\": \\\"\\\",\\n  \\\"requirement_id\\\": \\\"\\\",\\n  \\\"title\\\": \\\"\\\",\\n  \\\"requirement_summary\\\": \\\"\\\",\\n  \\\"source_type\\\": \\\"CRS|BRD|User Story|Jira|Defect|Other\\\",\\n  \\\"facts\\\": [],\\n  \\\"assumptions\\\": [],\\n  \\\"clarification_questions\\\": [],\\n  \\\"impacted_areas\\\": [],\\n  \\\"scope\\\": {\\\"in_scope\\\": [], \\\"out_of_scope\\\": []},\\n  \\\"acceptance_criteria\\\": [],\\n  \\\"risks\\\": [],\\n  \\\"next_stage\\\": \\\"TEST_PLAN\\\"\\n}"
+        }
+      },
+      "id": "qa_orchestrator_agent",
+      "name": "QA Orchestrator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "qwen3:1.7b",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "ollama_orchestrator",
+      "name": "Ollama - Orchestrator (Qwen3 1.7B)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify($json) }}",
+        "options": {
+          "systemMessage": "You are a Senior QA Test Plan Agent.\\n\\nCreate a production-quality Test Plan from the approved requirement.\\n\\nRules:\\n- Do not invent unsupported behavior.\\n- Mark unknowns as TBD and add clarification questions.\\n- Use P1/P2/P3 priority only when justified.\\n- Keep the plan executable by a QA team.\\n- Return valid JSON only.\\n\\nOUTPUT:\\n{\\n  \\\"test_plan\\\": {\\n    \\\"objective\\\": \\\"\\\",\\n    \\\"summary\\\": \\\"\\\",\\n    \\\"scope\\\": {\\\"in_scope\\\": [], \\\"out_of_scope\\\": []},\\n    \\\"business_rules\\\": [],\\n    \\\"acceptance_criteria\\\": [],\\n    \\\"strategy\\\": \\\"\\\",\\n    \\\"test_types\\\": [],\\n    \\\"test_data\\\": [],\\n    \\\"environment\\\": {},\\n    \\\"automation_candidates\\\": [],\\n    \\\"risks\\\": [],\\n    \\\"entry_criteria\\\": [],\\n    \\\"exit_criteria\\\": []\\n  },\\n  \\\"traceability\\\": [],\\n  \\\"clarifications\\\": [],\\n  \\\"status\\\": \\\"READY_FOR_HUMAN_REVIEW\\\"\\n}"
+        }
+      },
+      "id": "test_plan_agent",
+      "name": "Test Plan Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "qwen3:1.7b",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "ollama_test_plan",
+      "name": "Ollama - Test Plan (Qwen3 1.7B)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1.2,
+      "position": [
+        700,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "QA Orchestrator - Test Plan Review",
+        "formDescription": "Approve or reject the generated Test Plan before continuing.",
+        "formFields": {
+          "values": [
+            {
+              "fieldType": "string",
+              "name": "Reviewer Name",
+              "label": "Reviewer Name",
+              "placeholder": "Enter reviewer name",
+              "requiredField": true
+            },
+            {
+              "fieldType": "options",
+              "name": "Decision",
+              "label": "Decision",
+              "options": [
+                {
+                  "name": "Approved",
+                  "value": "approved"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "rejected"
+                }
+              ],
+              "requiredField": true
+            },
+            {
+              "fieldType": "string",
+              "name": "Review Feedback",
+              "label": "Review Feedback",
+              "placeholder": "Add review comments",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "webhookSuffix": "test-plan-review"
+        }
+      },
+      "id": "human_review_test_plan",
+      "name": "Human Review - Test Plan",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        0
+      ],
+      "webhookId": "test-plan-review-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if_test_plan_approved",
+      "name": "IF - Test Plan Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify($json) }}",
+        "options": {
+          "systemMessage": "You are a Senior QA Manual Test Case Agent.\\n\\nGenerate detailed, executable test cases from the approved Test Plan and original requirement.\\n\\nRules:\\n- Do not create behavior not supported by the requirement.\\n- If evidence is missing, record it under assumptions or clarifications.\\n- Avoid duplicate test cases.\\n- Return valid JSON only.\\n\\nOUTPUT:\\n{\\n  \\\"test_cases\\\": [],\\n  \\\"coverage_summary\\\": {},\\n  \\\"clarifications\\\": [],\\n  \\\"status\\\": \\\"READY_FOR_HUMAN_REVIEW\\\"\\n}"
+        }
+      },
+      "id": "test_cases_agent",
+      "name": "Test Cases Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "qwen3:1.7b",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "ollama_test_cases",
+      "name": "Ollama - Test Cases (Qwen3 1.7B)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "QA Orchestrator - Test Case Review",
+        "formDescription": "Approve or reject the generated manual test cases.",
+        "formFields": {
+          "values": [
+            {
+              "fieldType": "string",
+              "name": "Reviewer Name",
+              "label": "Reviewer Name",
+              "placeholder": "Enter reviewer name",
+              "requiredField": true
+            },
+            {
+              "fieldType": "options",
+              "name": "Decision",
+              "label": "Decision",
+              "options": [
+                {
+                  "name": "Approved",
+                  "value": "approved"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "rejected"
+                }
+              ],
+              "requiredField": true
+            },
+            {
+              "fieldType": "string",
+              "name": "Review Feedback",
+              "label": "Review Feedback",
+              "placeholder": "Add review comments",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {
+          "webhookSuffix": "test-cases-review"
+        }
+      },
+      "id": "human_review_test_cases",
+      "name": "Human Review - Test Cases",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        0
+      ],
+      "webhookId": "test-cases-review-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json ?? {};\nconst decision = String(input.Decision ?? '').trim();\nconst reviewer = String(input['Reviewer Name'] ?? '').trim();\nconst feedback = String(input['Review Feedback'] ?? '').trim();\nreturn [{ json: { ...input, Decision: decision, 'Reviewer Name': reviewer, 'Review Feedback': feedback, testCaseReview: { decision, reviewer, feedback, submittedAt: new Date().toISOString() } } }];"
+      },
+      "id": "capture_test_case_review_response",
+      "name": "Capture Test Case Review Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if_test_cases_approved",
+      "name": "IF - Test Cases Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1970,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify($json) }}",
+        "options": {
+          "systemMessage": "You are a Senior QA Automation Engineer.\\n\\nGenerate a production-ready Playwright JavaScript automation package from the approved test cases and requirement.\\n\\nFramework standard:\\n- Playwright Test\\n- JavaScript\\n- Page Object Model\\n- async/await\\n- XPath only\\n- No CSS selectors\\n- No Thread.sleep\\n- No invented selectors presented as valid\\n- No hard-coded secrets\\n- Clear assertions and failure evidence\\n\\nOutput valid JSON only.\\n\\nDELIVERABLE:\\n{\\n  \\\"framework_structure\\\": {\\\"project_name\\\": \\\"\\\", \\\"folders\\\": []},\\n  \\\"package_json\\\": {\\\"path\\\": \\\"package.json\\\", \\\"content\\\": \\\"\\\"},\\n  \\\"playwright_config\\\": {\\\"path\\\": \\\"playwright.config.js\\\", \\\"content\\\": \\\"\\\"},\\n  \\\"page_objects\\\": [{\\\"path\\\": \\\"pages/LoginPage.js\\\", \\\"content\\\": \\\"\\\"}],\\n  \\\"test_specs\\\": [{\\\"path\\\": \\\"tests/login.spec.js\\\", \\\"content\\\": \\\"\\\"}],\\n  \\\"test_data\\\": [{\\\"path\\\": \\\"data/testData.js\\\", \\\"content\\\": \\\"\\\"}],\\n  \\\"environment_variables\\\": [],\\n  \\\"run_commands\\\": [],\\n  \\\"automation_notes\\\": [],\\n  \\\"unresolved_selectors\\\": [],\\n  \\\"traceability\\\": [],\\n  \\\"status\\\": \\\"READY_FOR_HUMAN_REVIEW\\\"\\n}"
+        }
+      },
+      "id": "automation_agent",
+      "name": "Automation Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "qwen3:4b",
+        "options": {
+          "temperature": 0.05
+        }
+      },
+      "id": "ollama_automation",
+      "name": "Ollama - Automation (Qwen3 4B)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1.2,
+      "position": [
+        2080,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "QA Orchestrator - Automation Review",
+        "formDescription": "Approve or reject the generated Playwright package.",
+        "formFields": {
+          "values": [
+            {
+              "fieldType": "string",
+              "name": "Reviewer Name",
+              "label": "Reviewer Name",
+              "placeholder": "Enter reviewer name",
+              "requiredField": true
+            },
+            {
+              "fieldType": "options",
+              "name": "Decision",
+              "label": "Decision",
+              "options": [
+                {
+                  "name": "Approved",
+                  "value": "approved"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "rejected"
+                }
+              ],
+              "requiredField": true
+            },
+            {
+              "fieldType": "string",
+              "name": "Review Feedback",
+              "label": "Review Feedback",
+              "placeholder": "Add review comments",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "webhookSuffix": "automation-review"
+        }
+      },
+      "id": "human_review_automation",
+      "name": "Human Review - Automation",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2320,
+        0
+      ],
+      "webhookId": "automation-review-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if_automation_approved",
+      "name": "IF - Automation Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json ?? {};\nconst decision = String(input.Decision ?? '').trim();\nconst reviewer = String(input['Reviewer Name'] ?? '').trim();\nconst feedback = String(input['Review Feedback'] ?? '').trim();\nreturn [{\n  json: {\n    workflow: 'QA Orchestrator',\n    status: 'APPROVED',\n    completedAt: new Date().toISOString(),\n    reviewer,\n    approvalDecision: decision || 'Approved',\n    automationPackage: input.output ?? input,\n    reviewFeedback: feedback,\n    message: 'QA workflow completed successfully. The approved package is ready for human-reviewed implementation.'\n  }\n}];"
+      },
+      "id": "finalize_qa_package",
+      "name": "Finalize QA Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json ?? {};\nreturn [{ json: { ...data, audit: { orchestrator: 'completed', test_plan: 'human-approved', test_cases: 'human-approved', automation: 'human-approved', timestamp: new Date().toISOString() } } }];"
+      },
+      "id": "qa_audit_summary",
+      "name": "QA Audit Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2980,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chat Trigger - Requirement Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Requirement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Requirement": {
+      "main": [
+        [
+          {
+            "node": "QA Orchestrator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Orchestrator Agent": {
+      "main": [
+        [
+          {
+            "node": "Test Plan Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Plan Agent": {
+      "main": [
+        [
+          {
+            "node": "Human Review - Test Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Review - Test Plan": {
+      "main": [
+        [
+          {
+            "node": "IF - Test Plan Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Test Plan Approved?": {
+      "main": [
+        [
+          {
+            "node": "Test Cases Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "QA Orchestrator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Cases Agent": {
+      "main": [
+        [
+          {
+            "node": "Human Review - Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Review - Test Cases": {
+      "main": [
+        [
+          {
+            "node": "Capture Test Case Review Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Test Case Review Response": {
+      "main": [
+        [
+          {
+            "node": "IF - Test Cases Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Test Cases Approved?": {
+      "main": [
+        [
+          {
+            "node": "Automation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Cases Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Automation Agent": {
+      "main": [
+        [
+          {
+            "node": "Human Review - Automation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Review - Automation": {
+      "main": [
+        [
+          {
+            "node": "IF - Automation Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Automation Approved?": {
+      "main": [
+        [
+          {
+            "node": "Finalize QA Package",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Automation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize QA Package": {
+      "main": [
+        [
+          {
+            "node": "QA Audit Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Orchestrator (Qwen3 1.7B)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "QA Orchestrator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Test Plan (Qwen3 1.7B)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Test Plan Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Test Cases (Qwen3 1.7B)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Test Cases Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Automation (Qwen3 4B)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Automation Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "qa-orchestrator-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
