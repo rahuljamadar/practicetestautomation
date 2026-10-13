@@ -24,9 +24,9 @@ Test cases stored in a CSV catalog are difficult to explore consistently by hand
 
 ## Data and Assumptions
 
-The prompt history describes a 5,000-row VWO test-case CSV at `data/vwo_5000_test_cases.csv` and reports duplicate scenarios, deprecated cases, and inconsistent labels. Those details are historical claims, not verified properties of the data currently available in this workspace. Before implementing data-specific behavior, obtain the CSV, confirm its path and schema, and profile its rows and quality issues.
+The CSV currently at `data/vwo_5000_test_cases.csv` is a synthetic 5,000-row development sample, not the historical VWO dataset. Its schema is confirmed by the CSV header and documented in `test_cases_catalog.md`. If the default CSV is missing, startup regenerates the synthetic sample; a custom `TC_MCP_CSV_PATH` is never populated automatically.
 
-The prompt history also reports a design of 21 tools across six groups, four resources, and three prompts. Their names and contracts are not present in the available files, so they must be recovered or designed and reviewed before implementation.
+The prompt history reports a design of 21 tools across six groups, four resources, and three prompts, but its detailed historical plan is not present in this checkout. The current names and contracts are a documented reconstruction, not an exact recovery.
 
 ## Constraints and Safety
 
@@ -48,6 +48,6 @@ The prompt history also reports a design of 21 tools across six groups, four res
 
 - The project can be started locally and connected to by a compatible MCP client over stdio and stateless HTTP.
 - MCP clients can discover and use the approved tools, resources, and prompts to retrieve bounded catalog information.
-- Catalog behavior is covered by tests using the confirmed schema, including relevant malformed, duplicate, deprecated, or inconsistent data cases found during profiling.
-- Write operations, if approved, are unavailable by default and cannot alter the source CSV; overlay behavior is tested separately.
+- Catalog behavior is covered by tests using the confirmed schema, including missing values, duplicate IDs/scenarios, deprecated states, filters, rankings, and response bounds.
+- Write tools are hidden by default and cannot alter the source CSV; overlay behavior is tested separately.
 - Setup, configuration, connection options, data placement, and write-safety behavior are documented.

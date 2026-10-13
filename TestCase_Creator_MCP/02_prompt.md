@@ -119,3 +119,7 @@ Can you please also write in the 02_prompt.md file whatever the prompt I have us
 2. **One clear outcome per prompt.** Each prompt asked for something specific and checkable: a plan file, a connection string, a running Inspector, a public URL.
 3. **Paste errors exactly as you see them.** Prompt 6 was only the raw error text. That was enough to find the cause in the server logs.
 4. **Keep a stop switch for anything public.** Prompt 7 shut down public access in one line.
+
+## Current checkout note
+
+The project currently in this workspace did not contain the historical plan or the implementation described above; Git history held only a five-tool MVP. The MCP has since been rebuilt as a documented reconstruction from the six groups and verified sample schema: 21 registered tools (19 visible by default, with two write tools hidden), four resources, and three prompts. Its missing default CSV is generated as synthetic development data, not as a real VWO catalog. See `README.md` and `architecture.md` for the implemented contracts and limitations.

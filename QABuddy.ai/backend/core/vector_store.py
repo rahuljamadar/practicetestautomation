@@ -1,0 +1,206 @@
+"""Qdrant vector store - embedded local mode by default, server mode via QDRANT_URL."""
+import shutil
+import uuid
+from pathlib import Path
+
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchAny,
+    MatchValue,
+    PayloadSchemaType,
+    PointStruct,
+    VectorParams,
+)
+
+from .config import LEGACY_DOC_TYPES, canonical_doc_type, settings
+
+_client: QdrantClient | None = None
+
+
+def get_client() -> QdrantClient:
+    global _client
+    if _client is None:
+        if settings.QDRANT_URL:
+            kwargs: dict = {"url": settings.QDRANT_URL, "timeout": 120}
+            if settings.QDRANT_API_KEY:
+                kwargs["api_key"] = settings.QDRANT_API_KEY
+            _client = QdrantClient(**kwargs)
+        else:
+            _client = QdrantClient(path=str(settings.QDRANT_PATH))
+    return _client
+
+
+def ensure_collection() -> None:
+    client = get_client()
+    if not client.collection_exists(settings.COLLECTION_NAME):
+        client.create_collection(
+            collection_name=settings.COLLECTION_NAME,
+            vectors_config=VectorParams(size=settings.EMBEDDING_DIM, distance=Distance.COSINE),
+        )
+    # Keyword indexes: Qdrant Cloud requires them for filtered count/search.
+    for field in ("doc_type", "source_file"):
+        try:
+            client.create_payload_index(
+                collection_name=settings.COLLECTION_NAME,
+                field_name=field,
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+        except Exception:
+            pass  # already indexed
+
+
+def point_id(record_id: str, source_file: str, row: int) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{source_file}:{record_id}:{row}"))
+
+
+def upsert_chunks(chunks: list[dict], vectors: list[list[float]]) -> int:
+    client = get_client()
+    ensure_collection()
+    points = [
+        PointStruct(
+            id=point_id(c["record_id"], c["source_file"], c["row"]),
+            vector=vec,
+            payload={
+                "record_id": c["record_id"],
+                "doc_type": c["doc_type"],
+                "title": c["title"],
+                "priority": c["priority"],
+                "category": c["category"],
+                "issue_key": c["issue_key"],
+                "source_file": c["source_file"],
+                "row": c["row"],
+                "location": c["location"],
+                "text": c["text"],
+            },
+        )
+        for c, vec in zip(chunks, vectors)
+    ]
+    # Batch upserts: free-tier Cloud clusters time out on one giant request.
+    batch_size = 64
+    for start in range(0, len(points), batch_size):
+        client.upsert(
+            collection_name=settings.COLLECTION_NAME,
+            points=points[start:start + batch_size],
+            wait=True,
+        )
+    return len(points)
+
+
+def _match_values(doc_type: str) -> list[str]:
+    """All stored values satisfying a requested doc_type (legacy + canonical)."""
+    canon = canonical_doc_type(doc_type)
+    values = {doc_type, canon}
+    for legacy, mapped in (("playwright_spec", "automation_spec"),
+                           ("playwright_page", "automation_page"),
+                           ("playwright_module", "automation_module")):
+        if doc_type in (legacy, mapped):
+            values.update((legacy, mapped))
+    return sorted(values)
+
+
+def _doc_type_filter(doc_type: str) -> Filter:
+    values = _match_values(doc_type)
+    if len(values) == 1:
+        return Filter(must=[FieldCondition(key="doc_type", match=MatchValue(value=values[0]))])
+    return Filter(must=[FieldCondition(key="doc_type", match=MatchAny(any=values))])
+
+
+def search_vectors(query_vector: list[float], limit: int, doc_type: str | None = None) -> list[dict]:
+    client = get_client()
+    ensure_collection()
+    query_filter = None
+    if doc_type and doc_type != "all":
+        query_filter = _doc_type_filter(doc_type)
+    res = client.query_points(
+        collection_name=settings.COLLECTION_NAME,
+        query=query_vector,
+        limit=limit,
+        query_filter=query_filter,
+        with_payload=True,
+    )
+    hits = []
+    for pt in res.points:
+        payload = dict(pt.payload or {})
+        payload["vector_score"] = float(pt.score)
+        hits.append(payload)
+    return hits
+
+
+def collection_counts() -> dict:
+    client = get_client()
+    ensure_collection()
+    out = {"total": 0, "by_type": {}}
+    res = client.count(collection_name=settings.COLLECTION_NAME, exact=True)
+    out["total"] = res.count
+    for doc_type in ("jira_defect", "test_case", "automation_spec", "automation_page", "automation_module"):
+        try:
+            r = client.count(
+                collection_name=settings.COLLECTION_NAME,
+                exact=True,
+                count_filter=_doc_type_filter(doc_type),
+            )
+            out["by_type"][doc_type] = r.count
+        except Exception:
+            out["by_type"][doc_type] = 0
+    # Mirror legacy keys so older UIs keep rendering during the transition.
+    for legacy in LEGACY_DOC_TYPES:
+        canon = canonical_doc_type(legacy)
+        out["by_type"].setdefault(legacy, out["by_type"].get(canon, 0))
+    return out
+
+
+def scroll_chunks(doc_type: str | None = None, limit: int = 50) -> list[dict]:
+    client = get_client()
+    ensure_collection()
+    query_filter = None
+    if doc_type and doc_type != "all":
+        query_filter = _doc_type_filter(doc_type)
+    points, _ = client.scroll(
+        collection_name=settings.COLLECTION_NAME,
+        limit=limit,
+        scroll_filter=query_filter,
+        with_payload=True,
+    )
+    return [dict(pt.payload or {}) for pt in points]
+
+
+def _reset_local_store() -> None:
+    """Drop the embedded local store on disk and reopen a fresh client.
+
+    In local mode `delete_collection()` reports success but the points survive on
+    disk (qdrant-client quirk), so a true wipe means rebuilding the store.
+    """
+    global _client
+    if _client is not None:
+        try:
+            _client.close()
+        except Exception:
+            pass
+        _client = None
+    shutil.rmtree(Path(settings.QDRANT_PATH), ignore_errors=True)
+
+
+def wipe_collection() -> None:
+    if settings.QDRANT_URL:
+        client = get_client()
+        if client.collection_exists(settings.COLLECTION_NAME):
+            client.delete_collection(settings.COLLECTION_NAME)
+    else:
+        _reset_local_store()
+    ensure_collection()
+
+
+def delete_by_source(source_file: str) -> None:
+    """Remove previously indexed points for a source file (clean re-upload replacement)."""
+    client = get_client()
+    ensure_collection()
+    client.delete(
+        collection_name=settings.COLLECTION_NAME,
+        points_selector=Filter(
+            must=[FieldCondition(key="source_file", match=MatchValue(value=source_file))]
+        ),
+        wait=True,
+    )

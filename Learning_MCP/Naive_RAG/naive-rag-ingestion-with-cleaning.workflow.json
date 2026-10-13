@@ -1,0 +1,249 @@
+{
+  "name": "Naive RAG Test Case File Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Upload Test Cases",
+        "formDescription": "Upload a JSON test-case file. Each case is normalized, validated, deduplicated, and stored individually.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Test Case JSON File",
+              "fieldName": "testCaseFile",
+              "fieldType": "file",
+              "acceptFileTypes": ".json",
+              "multipleFiles": false,
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Source Name",
+              "fieldName": "sourceName",
+              "fieldType": "text",
+              "placeholder": "Optional document name or source",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "naive-rag-form-trigger",
+      "name": "On form submission",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        120
+      ],
+      "webhookId": "naive-rag-ingestion-form"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "binaryPropertyName": "Test_Case_JSON_File",
+        "destinationKey": "data",
+        "options": {
+          "encoding": "utf8",
+          "stripBOM": true,
+          "keepSource": "json"
+        }
+      },
+      "id": "extract-test-case-json",
+      "name": "Extract Test Case JSON File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const normalize = (value) => String(value ?? '')\n  .replace(/\\r\\n?/g, '\\n')\n  .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')\n  .replace(/\\u00A0/g, ' ')\n  .replace(/[\\t ]+/g, ' ')\n  .replace(/ *\\n */g, '\\n')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nconst getField = (record, names) => {\n  for (const name of names) {\n    if (record[name] !== undefined && record[name] !== null) return record[name];\n  }\n  return undefined;\n};\n\nconst cleanedItems = [];\nconst seenContent = new Set();\nconst seenIds = new Map();\nlet duplicatesRemoved = 0;\n\nfor (const item of $input.all()) {\n  const input = item.json ?? {};\n  let parsed = input.data ?? input.testCases ?? input.test_cases ?? input;\n  if (typeof parsed === 'string') {\n    try {\n      parsed = JSON.parse(parsed);\n    } catch (error) {\n      throw new Error(`Extracted test-case JSON is invalid: ${error.message}`);\n    }\n  }\n\n  const cases = Array.isArray(parsed)\n    ? parsed\n    : Array.isArray(parsed?.testCases)\n      ? parsed.testCases\n      : Array.isArray(parsed?.test_cases)\n        ? parsed.test_cases\n        : Array.isArray(parsed?.cases)\n          ? parsed.cases\n          : [parsed];\n  if (cases.length === 0) throw new Error('The uploaded file contains no test cases.');\n\n  const sourceName = normalize(input.sourceName ?? input['Source Name'] ?? 'uploaded-test-cases.json') || 'uploaded-test-cases.json';\n\n  for (let index = 0; index < cases.length; index++) {\n    const testCase = cases[index];\n    if (!testCase || typeof testCase !== 'object' || Array.isArray(testCase)) {\n      throw new Error(`Test case ${index + 1} must be a JSON object.`);\n    }\n\n    const id = normalize(getField(testCase, ['id', 'testCaseId', 'test_case_id', 'Test Case ID', 'TestCaseID']));\n    const title = normalize(getField(testCase, ['title', 'name', 'Test Case', 'Test Case Title']));\n    const preconditions = normalize(getField(testCase, ['preconditions', 'precondition', 'Preconditions']));\n    const rawSteps = getField(testCase, ['steps', 'testSteps', 'test_steps', 'Steps']);\n    const expectedResult = normalize(getField(testCase, ['expectedResult', 'expected_result', 'expected', 'Expected Result']));\n    const steps = Array.isArray(rawSteps)\n      ? rawSteps.map(normalize).filter(Boolean)\n      : typeof rawSteps === 'string'\n        ? rawSteps.split(/\\r?\\n|;/).map(normalize).filter(Boolean)\n        : [];\n\n    if (!title) throw new Error(`Test case ${index + 1} is missing title.`);\n    if (steps.length === 0) throw new Error(`Test case ${id || index + 1} must have at least one step.`);\n    if (!expectedResult) throw new Error(`Test case ${id || index + 1} is missing expectedResult.`);\n\n    const contentKey = normalize([title, preconditions, ...steps, expectedResult].join('\\n')).toLocaleLowerCase();\n    const idKey = id.toLocaleLowerCase();\n    if (idKey && seenIds.has(idKey)) {\n      if (seenIds.get(idKey) !== contentKey) throw new Error(`Test case ID ${id} is used by different test-case content.`);\n      duplicatesRemoved++;\n      continue;\n    }\n    if (seenContent.has(contentKey)) {\n      duplicatesRemoved++;\n      continue;\n    }\n\n    if (idKey) seenIds.set(idKey, contentKey);\n    seenContent.add(contentKey);\n\n    const cleanedText = [\n      id ? `Test Case ID: ${id}` : null,\n      `Title: ${title}`,\n      preconditions ? `Preconditions: ${preconditions}` : null,\n      `Steps:\\n${steps.map((step, stepIndex) => `${stepIndex + 1}. ${step}`).join('\\n')}`,\n      `Expected Result: ${expectedResult}`\n    ].filter(Boolean).join('\\n\\n');\n\n    cleanedItems.push({\n      json: { testCaseId: id || null, title, preconditions, steps, expectedResult, sourceName, cleanedText },\n      pairedItem: { item: 0 }\n    });\n  }\n}\n\nif (cleanedItems.length === 0) throw new Error('No unique test cases remain after deduplication.');\nfor (const item of cleanedItems) item.json.duplicatesRemoved = duplicatesRemoved;\nreturn cleanedItems;"
+      },
+      "id": "clean-document-text",
+      "name": "Clean Document Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-over-test-cases",
+      "name": "Loop Over Test Cases",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        700,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "CHANGE_ME_PINECONE_INDEX",
+          "mode": "list",
+          "cachedResultName": "CHANGE_ME_PINECONE_INDEX"
+        },
+        "options": {}
+      },
+      "id": "pinecone-vector-store",
+      "name": "Pinecone Vector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.1,
+      "position": [
+        980,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.cleanedText }}",
+        "textSplittingMode": "custom",
+        "options": {}
+      },
+      "id": "default-data-loader",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1260,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "chunkSize": 5000,
+        "chunkOverlap": 0,
+        "options": {}
+      },
+      "id": "recursive-text-splitter",
+      "name": "Recursive Character Text Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "google-gemini-embeddings",
+      "name": "Embeddings Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        980,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract Test Case JSON File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Test Case JSON File": {
+      "main": [
+        [
+          {
+            "node": "Clean Document Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Document Text": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Test Cases": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Pinecone Vector Store": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "ai_document": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ],
+      "ai_embedding": [
+        [
+          {
+            "node": "Embeddings Google Gemini",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Recursive Character Text Splitter",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "naive-rag-ingestion-cleaning-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

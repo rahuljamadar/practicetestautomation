@@ -1,46 +1,67 @@
 # TestCreator MCP
 
-A local-first MCP server for searching and inspecting test cases in a CSV catalog. The catalog schema is discovered from the CSV header; no VWO-specific columns are assumed.
+A local-first FastMCP server for discovering, reviewing, ranking, and exporting test cases from a CSV catalog. The source CSV is never modified. The server exposes 21 tools, four resources, and three prompts; its two overlay-writing tools are hidden unless explicitly enabled.
 
-## Requirements
+## Data
+
+`data/vwo_5000_test_cases.csv` is a **synthetic development sample**, not a verified VWO export. If the default file is missing, the server creates 5,000 synthetic rows on startup. If `TC_MCP_CSV_PATH` is set, that custom path is used as-is and is not populated automatically. Set it only to a catalog you have verified.
+
+## Requirements and Tests
 
 - Python 3.12, 3.13, or 3.14
 - `uv`
-- A UTF-8 CSV catalog (the source file is read-only)
-
-The prompt history references `data/vwo_5000_test_cases.csv`, but that dataset is not currently in this project. Place the confirmed catalog at that path or set `TC_MCP_CSV_PATH` to its location.
-
-## Install and test
 
 ```powershell
 uv sync --extra dev
 uv run pytest -q
 ```
 
-## Connect over stdio
+## Connect
+
+On Windows, start both local services with one command:
+
+```powershell
+.\scripts\start_testcreator_mcp.ps1
+```
+
+The launcher starts the MCP server if port 8000 is free and runs Inspector in the same terminal if port 6274 is free. Inspector opens a browser with a fresh authenticated URL and prints that URL in the terminal; keep the terminal open while using Inspector. Its tokenized URL changes after an Inspector restart. If Inspector is already running, the current tokenized URL remains valid.
+
+Stdio for process-based MCP clients:
 
 ```powershell
 uv run tc-mcp
 ```
 
-For MCP clients that launch local processes, configure the command as `uv` with arguments `run`, `--directory`, `<absolute-path-to-this-project>`, `tc-mcp`.
-
-## Connect over local HTTP
+Local stateless HTTP:
 
 ```powershell
 uv run tc-mcp --transport http --host 127.0.0.1 --port 8000 --path /mcp
 ```
 
-Configure the MCP client or Inspector to use `http://127.0.0.1:8000/mcp`. HTTP runs in stateless mode. The default bind address is loopback; do not expose it publicly without an explicit deployment and security review.
+Use `http://127.0.0.1:8000/mcp` as the Streamable HTTP MCP endpoint. Opening `http://127.0.0.1:8000/` in a browser shows connection help. To open MCP Inspector preconfigured for this server:
 
-## Current MCP interface
+```powershell
+npx @modelcontextprotocol/inspector --transport http --server-url http://127.0.0.1:8000/mcp
+```
 
-The initial schema-agnostic MVP exposes:
+The server binds to loopback by default. Do not expose it publicly without an explicit deployment and security review.
 
-- Tools: `catalog_summary`, `catalog_schema`, `search_test_cases`, `filter_test_cases`, and `get_test_cases`
-- Resources: `catalog://summary` and `catalog://schema`
-- Prompts: `build_test_plan` and `find_reusable_tests`
+## MCP Interface
 
-Search is case-insensitive across all fields. Filters use exact, case-insensitive values. Results are capped at 100 rows per call. This is an initial interface, not the historical 21-tool inventory mentioned in `02_prompt.md`; the exact contracts should be finalized after the source CSV and prior plan are available.
+Catalog overview: `catalog_summary`, `catalog_schema`, `catalog_statistics`, `list_catalog_values`.
 
-The current server is read-only. No tool edits the source CSV or writes an overlay.
+Search and lookup: `search_test_cases`, `get_test_cases`, `get_test_case`, `get_test_cases_by_ids`.
+
+Filtering and browsing: `filter_test_cases`, `browse_test_cases`, `list_modules`, `list_features`.
+
+Coverage and quality: `get_coverage_report`, `get_data_quality_report`, `find_duplicate_test_cases`, `find_deprecated_test_cases`.
+
+Selection and planning: `rank_test_cases`, `recommend_test_cases`, `create_test_plan`.
+
+Curation and export: `annotate_test_case`, `export_test_cases`. These two tools write only to `data/test_case_overlay.json` (or `TC_MCP_OVERLAY_PATH`) and are disabled by default. Enable them explicitly with `uv run tc-mcp --enable-write-tools` (add the desired transport options as needed).
+
+Resources: `catalog://summary`, `catalog://schema`, `catalog://coverage`, and `catalog://data-quality`.
+
+Prompts: `build_test_plan`, `find_reusable_tests`, and `review_coverage_gaps`.
+
+Search is case-insensitive; filters use exact case-insensitive values. List responses default to 20 and are capped at 100. The ranking score is deterministic and favors textual relevance, higher priority, and active cases. The historical plan with exact tool contracts is not in this checkout, so this inventory is a documented reconstruction from `02_prompt.md`, `objective.md`, and the confirmed CSV schema.

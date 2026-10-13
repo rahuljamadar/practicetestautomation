@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "testskill-finder-mcp"
+version = "0.1.0"
+description = "Local-first MCP server for discovering QA agent skills from a local skills catalog"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "fastmcp==4.1.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+skillfinder-mcp = "skillfinder_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skillfinder_mcp"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

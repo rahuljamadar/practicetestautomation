@@ -13,6 +13,11 @@ Session_Storage/
 .env
 .env.*
 auth.json
+user-session.json
+
+# Python cache files
+__pycache__/
+*.py[cod]
 
 # Playwright MCP / local tooling state
 .playwright-mcp/
