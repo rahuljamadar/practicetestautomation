@@ -97,11 +97,15 @@ export default function App() {
     <div className="app">
       <main className="main">
         <header className="hero">
-          <h1>QABuddy<span className="accent">.ai</span></h1>
-          <p className="tagline">
-            Grounded QA intelligence over your Jira defects, test cases and automation frameworks —
-            with vector search, neural reranking and zero-hallucination answers.
-          </p>
+          <div className="hero-top">
+            <div>
+              <h1>QABuddy<span className="accent">.ai</span></h1>
+              <p className="tagline">
+                Grounded QA intelligence over your Jira defects, test cases and automation frameworks —
+                with vector search, neural reranking and zero-hallucination answers.
+              </p>
+            </div>
+          </div>
         </header>
 
         <div className="search-box">

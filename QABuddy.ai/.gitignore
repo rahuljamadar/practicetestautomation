@@ -34,3 +34,6 @@ data/frameworks/
 
 # Vercel
 .vercel/
+.vercel
+.vercel_python_packages/
+.env*

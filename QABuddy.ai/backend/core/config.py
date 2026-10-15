@@ -33,11 +33,11 @@ def canonical_doc_type(doc_type: str | None) -> str | None:
 
 
 # Embedding provider -> (default model id, default vector dimension).
-#   local  : fastembed ONNX on CPU, no API key (offline-friendly)
-#   gemini : Google Generative Language REST API, needs GEMINI_API_KEY
-_EMBED_PROVIDER = os.getenv("EMBED_PROVIDER", "local").strip().lower()
+#   gemini : Google Generative Language REST API, needs GEMINI_API_KEY (default)
+#   local  : fastembed ONNX on CPU, offline-friendly (requires `pip install fastembed onnxruntime`)
+_EMBED_PROVIDER = os.getenv("EMBED_PROVIDER", "gemini").strip().lower()
 if _EMBED_PROVIDER not in ("local", "gemini"):
-    _EMBED_PROVIDER = "local"
+    _EMBED_PROVIDER = "gemini"
 
 _EMBED_DEFAULTS = {
     "local": ("sentence-transformers/all-MiniLM-L6-v2", 384),
@@ -51,7 +51,7 @@ class Settings:
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", os.getenv("GROQ_MODEL_NAME", "qwen/qwen3.8-27b"))
 
-    # --- Embeddings (local fastembed by default; Gemini optional) ---
+    # --- Embeddings (Gemini by default; local fastembed is opt-in) ---
     EMBED_PROVIDER: str = _EMBED_PROVIDER
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL_NAME") or _DEFAULT_EMBED_MODEL
@@ -91,11 +91,40 @@ class Settings:
     ALLOWED_ORIGINS: list[str] = ["*"]
 
 
+def _is_writable(path: Path) -> bool:
+    """True when `path` can be created (if needed) and written to."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_probe"
+        probe.write_bytes(b"")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
 settings = Settings()
-try:
-    settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-except OSError:
-    print(f"[config] WARNING: cannot create {settings.STORAGE_DIR} (read-only FS); using request-scoped storage.")
+
+# Vercel Functions are read-only outside /tmp, and the VERCEL probe can miss. Move every
+# writable path under /tmp when the chosen state directory turns out not to be writable.
+_state_read_only = not _is_writable(settings.STORAGE_DIR)
+if _state_read_only:
+    _fallback = Path("/tmp/qabuddy")
+    if _is_writable(_fallback):
+        settings.STORAGE_DIR = _fallback
+        settings.CACHE_DB = _fallback / "cache.sqlite3"
+        settings.UPLOAD_DIR = _fallback / "uploads"
+        settings.FRAMEWORKS_DIR = _fallback / "frameworks"
+        if not settings.QDRANT_URL:
+            settings.QDRANT_PATH = str(_fallback / "qdrant")
+        print(f"[config] state dir not writable; falling back to {_fallback} (ephemeral).")
+    else:
+        print("[config] WARNING: no writable state directory found; uploads will fail.")
+
+# huggingface_hub / hf_xet stage the local embedding model under HF_HOME, which defaults
+# outside /tmp; on a read-only host that raises "Read-only file system (os error 30)".
+if IS_VERCEL or _state_read_only:
+    os.environ.setdefault("HF_HOME", str(settings.STORAGE_DIR / "hf"))
 
 if not settings.GROQ_API_KEY:
     print("[config] WARNING: GROQ_API_KEY is not set - LLM answers will fail.")

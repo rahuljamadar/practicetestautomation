@@ -5,6 +5,3 @@ python-dotenv>=1.0
 pydantic>=2.6
 qdrant-client>=1.19
 python-multipart>=0.0.9
-fastembed>=0.4.0
-# Pinned: onnxruntime 1.31 access-violates on import on some Windows builds.
-onnxruntime==1.19.2

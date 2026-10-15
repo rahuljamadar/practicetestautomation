@@ -48,6 +48,7 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 
+
 # Serve the built React frontend. Locally we fall back to a standard StaticFiles mount,
 # declared last so API routes take precedence. Gate on VERCEL (not hasattr) since
 # FastAPI >= 0.135 ships an unrelated `frontend()` helper.
@@ -56,6 +57,6 @@ if _DIST_DIR.is_dir():
     import os as _os
 
     if _os.environ.get("VERCEL"):
-        app.frontend("/", directory="frontend/dist")
+        app.frontend("/", directory=str(_DIST_DIR))
     else:
         app.mount("/", StaticFiles(directory=str(_DIST_DIR), html=True), name="frontend")

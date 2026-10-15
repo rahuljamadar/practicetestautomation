@@ -17,7 +17,7 @@ question ─► embed ─► Qdrant vector search ─► rerank ─► grounded 
 |---|---|
 | Frontend | React 18 + Vite 5 |
 | Backend | FastAPI (Python 3.12) |
-| Embeddings | `fastembed` `all-MiniLM-L6-v2` (384-d) by default, or Gemini `gemini-embedding-001` (768-d) |
+| Embeddings | Gemini `gemini-embedding-001` (768-d) by default; `fastembed` `all-MiniLM-L6-v2` (384-d) is an opt-in offline alternative |
 | Vector DB | Qdrant — Cloud via `QDRANT_URL`, else the embedded local file store |
 | Answer LLM | Groq chat completions, with a strict grounding guardrail |
 | Reranker | Cohere Rerank v2 when a key is set, else the Groq-LLM fallback |
@@ -40,10 +40,9 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8077
 ```
 
-First run downloads the local embedding model once (Hugging Face cache).
-
-> `onnxruntime` is pinned to `1.19.2`: the newer `1.31` build access-violates on import on some
-> Windows machines, which crashes `qdrant-client` (it imports fastembed → onnxruntime at startup).
+Embeddings default to the hosted Gemini model, so there is no model to download. For the offline
+`EMBED_PROVIDER=local` path, also run `pip install fastembed onnxruntime` — the first run then
+downloads the ONNX model once (Hugging Face cache).
 
 ### Frontend (dev)
 
@@ -69,9 +68,10 @@ copy .env.example .env
 Then set in `.env`:
 
 - `GROQ_API_KEY` — required for answers and the LLM reranker fallback.
-- `QDRANT_URL` + `QDRANT_API_KEY` — your Qdrant Cloud cluster (leave `QDRANT_URL` empty to use the
-  embedded local store instead).
-- `EMBED_PROVIDER` — `local` (default) or `gemini` (also needs `GEMINI_API_KEY`).
+- `QDRANT_URL` + `QDRANT_API_KEY` — your Qdrant Cloud cluster. Required in production: without
+  a URL the embedded file store is used, which is read-only/ephemeral on Vercel.
+- `EMBED_PROVIDER` — `gemini` (default, needs `GEMINI_API_KEY`) or `local` (offline; installs
+  `fastembed` + `onnxruntime` separately).
 
 Switching `EMBED_PROVIDER` changes the vector dimension, so run **Full Reindex** afterwards.
 
@@ -106,5 +106,6 @@ faster, cheaper lookups. Restart the backend after changing them.
 ## News
 
 Reproduced from the public reference project `github.com/poornimahebbar/qabuddy-rag`. The
-Qdrant/Groq/FastAPI/React architecture, API contract, UI and parsing logic are theirs; the
-embedding-provider switch (local default) is the only functional change here.
+Qdrant/Groq/FastAPI/React architecture, API contract, UI and parsing logic are theirs; the only
+functional extension here is the optional offline embedding provider (Gemini is the default,
+matching the reference).

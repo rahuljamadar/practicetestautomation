@@ -80,9 +80,18 @@ def _cache_put(items: dict[str, list[float]]) -> None:
 def _get_local_model():
     global _local_model
     if _local_model is None:
-        from fastembed import TextEmbedding
+        try:
+            from fastembed import TextEmbedding
+        except ImportError as e:
+            raise RuntimeError(
+                "EMBED_PROVIDER=local requires the fastembed package: "
+                "pip install fastembed onnxruntime, or set EMBED_PROVIDER=gemini."
+            ) from e
         print(f"[embed] loading local model {settings.EMBEDDING_MODEL} (first run downloads it)")
-        _local_model = TextEmbedding(model_name=settings.EMBEDDING_MODEL)
+        _local_model = TextEmbedding(
+            model_name=settings.EMBEDDING_MODEL,
+            cache_dir=str(settings.STORAGE_DIR / "fastembed"),
+        )
     return _local_model
 
 

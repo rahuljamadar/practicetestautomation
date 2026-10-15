@@ -1,6 +1,7 @@
 # Secrets and local state must never enter the deployment bundle
-.env
+.env*
 .venv/
+.vercel_python_packages/
 storage/
 qabuddy.db
 *.log

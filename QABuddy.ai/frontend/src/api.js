@@ -2,9 +2,13 @@
 const BASE = import.meta.env.VITE_API_URL || ''
 
 async function request(path, options = {}) {
+  const headers = new Headers(options.headers || {})
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   })
   if (!res.ok) {
     let detail = res.statusText
@@ -41,7 +45,10 @@ export async function uploadCsv(file, category) {
   form.append('file', file)
   let res
   try {
-    res = await fetch(`${BASE}/api/upload`, { method: 'POST', body: form })
+    res = await fetch(`${BASE}/api/upload`, {
+      method: 'POST',
+      body: form,
+    })
   } catch {
     throw new Error('Backend offline — could not reach the upload service.')
   }
