@@ -21,6 +21,7 @@
   "homepage": "https://github.com/rahuljamadar/practicetestautomation#readme",
   "description": "",
   "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.2",
     "allure-commandline": "^2.33.0",
