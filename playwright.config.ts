@@ -12,7 +12,7 @@ export default defineConfig({
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   workers: isCI ? 1 : undefined,
-  reporter: [['html'], ['line'], ['allure-playwright']],
+  reporter: [['./Basics_Playwright/test/util/CustomReport.ts']],
   use: {
     headless: false,
     trace: 'on-first-retry',
